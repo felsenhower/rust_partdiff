@@ -177,11 +177,11 @@ impl PartdiffMatrix {
 // 2d-array-indexing allows access to matrix elements with following syntax:
 //   matrix[[x,y]]
 //
-// This version is used if the crate is build with: --features "2d-array-indexing"
+// This version is used if the crate is built by default; i.e. when not passing --features "C-style-indexing"
 //
 // Also supports switching between indexing with or without bounds checking
 // This can be set by building the crate with or without: --features "unsafe-indexing"
-#[cfg(feature = "2d-array-indexing")]
+#[cfg(not(feature = "C-style-indexing"))]
 impl Index<[usize; 2]> for PartdiffMatrix {
     type Output = f64;
 
@@ -197,7 +197,7 @@ impl Index<[usize; 2]> for PartdiffMatrix {
     }
 }
 
-#[cfg(feature = "2d-array-indexing")]
+#[cfg(not(feature = "C-style-indexing"))]
 impl IndexMut<[usize; 2]> for PartdiffMatrix {
     fn index_mut(&mut self, idx: [usize; 2]) -> &mut Self::Output {
         #[cfg(not(feature = "unsafe-indexing"))]
@@ -381,7 +381,7 @@ fn init_matrices(arguments: &mut CalculationArguments, options: &CalculationOpti
 
         for g in 0..arguments.num_matrices as usize {
             for i in 0..(n + 1) {
-                #[cfg(feature = "2d-array-indexing")]
+                #[cfg(not(feature = "C-style-indexing"))]
                 {
                     matrix[g][[i, 0]] = 1.0 - (h * i as f64);
                     matrix[g][[i, n]] = h * i as f64;
@@ -448,7 +448,7 @@ fn calculate(
             }
 
             for j in 1..n {
-                #[cfg(feature = "2d-array-indexing")]
+                #[cfg(not(feature = "C-style-indexing"))]
                 {
                     star = 0.25
                         * (matrix[m2][[i - 1, j]]
@@ -470,7 +470,7 @@ fn calculate(
                 }
 
                 if (options.termination == TerminationCondition::TermPrec) | (term_iteration == 1) {
-                    #[cfg(feature = "2d-array-indexing")]
+                    #[cfg(not(feature = "C-style-indexing"))]
                     {
                         residuum = (matrix[m2][[i, j]] - star).abs();
                     }
@@ -485,7 +485,7 @@ fn calculate(
                     };
                 }
 
-                #[cfg(feature = "2d-array-indexing")]
+                #[cfg(not(feature = "C-style-indexing"))]
                 {
                     matrix[m1][[i, j]] = star;
                 }
@@ -567,7 +567,7 @@ fn display_matrix(
     println!("Matrix:");
     for y in 0..9 as usize {
         for x in 0..9 as usize {
-            #[cfg(feature = "2d-array-indexing")]
+            #[cfg(not(feature = "C-style-indexing"))]
             {
                 print!(
                     " {:.4}",
