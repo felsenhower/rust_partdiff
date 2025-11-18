@@ -82,7 +82,7 @@ impl std::str::FromStr for TerminationCondition {
 // Data structure for storing the given parameters for the calculation
 #[derive(Debug)]
 struct CalculationOptions {
-    number: u64,                       // number of threads
+    _number: u64,                      // number of threads
     method: CalculationMethod,         // Gauss Seidel or Jacobi method of iteration
     interlines: usize,                 // matrix size = interline*8+9
     inf_func: InferenceFunction,       // inference function
@@ -93,7 +93,7 @@ struct CalculationOptions {
 
 impl CalculationOptions {
     fn new(
-        number: u64,
+        _number: u64,
         method: CalculationMethod,
         interlines: usize,
         inf_func: InferenceFunction,
@@ -102,7 +102,7 @@ impl CalculationOptions {
         term_precision: f64,
     ) -> CalculationOptions {
         CalculationOptions {
-            number,
+            _number,
             method,
             interlines,
             inf_func,
