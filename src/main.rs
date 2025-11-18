@@ -468,13 +468,13 @@ fn calculate(arguments: &mut CalculationArguments, results: &mut CalculationResu
             {
                 #[cfg(feature = "2d-array-indexing")]
                 {
-                    star = 0.25 * (matrix[m1][[i-1,j]] + matrix[m1][[i+1,j]] +
-                        matrix[m1][[i,j-1]] + matrix[m1][[i,j+1]]);
+                    star = 0.25 * (matrix[m2][[i-1,j]] + matrix[m2][[i,j-1]] +
+                    matrix[m2][[i,j+1]] + matrix[m2][[i+1,j]]);
                 }
                 #[cfg(feature = "C-style-indexing")]
                 {
-                    star = 0.25 * (matrix[m1][i-1][j] + matrix[m1][i+1][j] +
-                        matrix[m1][i][j-1] + matrix[m1][i][j+1]);
+                    star = 0.25 * (matrix[m2][i-1][j] + matrix[m2][i][j-1] +
+                    matrix[m2][i][j+1] + matrix[m2][i+1][j]);
                 }
 
                 if options.inf_func == InferenceFunction::FuncFPiSin
@@ -486,11 +486,11 @@ fn calculate(arguments: &mut CalculationArguments, results: &mut CalculationResu
                 {
                     #[cfg(feature = "2d-array-indexing")]
                     {
-                        residuum = (matrix[m1][[i,j]] - star).abs();
+                        residuum = (matrix[m2][[i,j]] - star).abs();
                     }
                     #[cfg(feature = "C-style-indexing")]
                     {
-                        residuum = (matrix[m1][i][j] - star).abs();
+                        residuum = (matrix[m2][i][j] - star).abs();
                     }
 
                     maxresiduum = match residuum
@@ -502,11 +502,11 @@ fn calculate(arguments: &mut CalculationArguments, results: &mut CalculationResu
 
                 #[cfg(feature = "2d-array-indexing")]
                 {
-                    matrix[m2][[i,j]] = star;
+                    matrix[m1][[i,j]] = star;
                 }
                 #[cfg(feature = "C-style-indexing")]
                 {
-                    matrix[m2][i][j] = star;
+                    matrix[m1][i][j] = star;
                 }
             }
         }
