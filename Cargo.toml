@@ -13,3 +13,4 @@ C-style-indexing = []
 unsafe-indexing = []
 
 [dependencies]
+ndarray = "0.17.1"

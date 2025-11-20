@@ -1,8 +1,8 @@
 use std::env;
-use std::ops::{Index, IndexMut};
 use std::process;
 use std::time::{Duration, Instant};
-use std::vec;
+
+use ndarray::Array2;
 
 // The supported calculation Algorithms
 // Gauss Seidel working on the same matrix
@@ -116,19 +116,20 @@ impl CalculationOptions {
 // Data structure for storing the the data needed during calculation
 #[derive(Debug)]
 struct CalculationArguments {
-    n: usize,                      // Number of spaces between lines (lines=n+1)
-    num_matrices: usize,           // number of matrices
-    h: f64,                        // length of a space between two lines
-    matrices: Vec<PartdiffMatrix>, // The matrices for calculation
+    n: usize,                   // Number of spaces between lines (lines=n+1)
+    num_matrices: usize,        // number of matrices
+    h: f64,                     // length of a space between two lines
+    matrices: Vec<Array2<f64>>, // The matrices for calculation (ndarray 2D arrays)
 }
 
 impl CalculationArguments {
     fn new(n: usize, num_matrices: usize, h: f64) -> CalculationArguments {
-        let mut matrices: Vec<PartdiffMatrix> = Vec::with_capacity(num_matrices);
-
+        // We'll allocate matrices with shape (n+1, n+1), where `n` here is the number of spaces
+        // between lines and the total matrix dimension is (n+1).
+        let mut matrices: Vec<Array2<f64>> = Vec::with_capacity(num_matrices);
+        let dim = n + 1;
         for _ in 0..num_matrices {
-            let matrix = PartdiffMatrix::new(n + 1);
-            matrices.push(matrix);
+            matrices.push(Array2::<f64>::zeros((dim, dim)));
         }
 
         CalculationArguments {
@@ -154,98 +155,6 @@ impl CalculationResults {
             m,
             stat_iteration,
             stat_precision,
-        }
-    }
-}
-
-// Simple data structure for a 2D matrix
-// Has an efficient continuous 1D memory layout
-#[derive(Debug)]
-struct PartdiffMatrix {
-    n: usize,
-    matrix: Vec<f64>,
-}
-
-impl PartdiffMatrix {
-    fn new(n: usize) -> PartdiffMatrix {
-        let matrix = vec![0.0; ((n + 1) * (n + 1)) as usize];
-        PartdiffMatrix { n, matrix }
-    }
-}
-
-// Implementation of Index and IndexMut traits for the matrix
-// 2d-array-indexing allows access to matrix elements with following syntax:
-//   matrix[[x,y]]
-//
-// This version is used if the crate is built by default; i.e. when not passing --features "C-style-indexing"
-//
-// Also supports switching between indexing with or without bounds checking
-// This can be set by building the crate with or without: --features "unsafe-indexing"
-#[cfg(not(feature = "C-style-indexing"))]
-impl Index<[usize; 2]> for PartdiffMatrix {
-    type Output = f64;
-
-    fn index(&self, idx: [usize; 2]) -> &Self::Output {
-        #[cfg(not(feature = "unsafe-indexing"))]
-        {
-            &self.matrix[idx[0] * self.n + idx[1]]
-        }
-        #[cfg(feature = "unsafe-indexing")]
-        unsafe {
-            &self.matrix.get_unchecked(idx[0] * self.n + idx[1])
-        }
-    }
-}
-
-#[cfg(not(feature = "C-style-indexing"))]
-impl IndexMut<[usize; 2]> for PartdiffMatrix {
-    fn index_mut(&mut self, idx: [usize; 2]) -> &mut Self::Output {
-        #[cfg(not(feature = "unsafe-indexing"))]
-        {
-            &mut self.matrix[idx[0] * self.n + idx[1]]
-        }
-        #[cfg(feature = "unsafe-indexing")]
-        unsafe {
-            self.matrix.get_unchecked_mut(idx[0] * self.n + idx[1])
-        }
-    }
-}
-
-// Implementation of Index and IndexMut traits for the matrix
-// C-style-indexing allows access to matrix elements with following syntax:
-//   matrix[x][y]
-//
-// This version is used if the crate is build with: --features "C-style-indexing"
-//
-// Also supports switching between indexing with or without bounds checking
-// This can be set by building the crate with or without: --features "unsafe-indexing"
-#[cfg(feature = "C-style-indexing")]
-impl Index<usize> for PartdiffMatrix {
-    type Output = [f64];
-
-    fn index(&self, idx: usize) -> &Self::Output {
-        #[cfg(not(feature = "unsafe-indexing"))]
-        {
-            &self.matrix[idx * self.n..(idx + 1) * self.n]
-        }
-        #[cfg(feature = "unsafe-indexing")]
-        unsafe {
-            &self.matrix.get_unchecked(idx * self.n..(idx + 1) * self.n)
-        }
-    }
-}
-
-#[cfg(feature = "C-style-indexing")]
-impl IndexMut<usize> for PartdiffMatrix {
-    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        #[cfg(not(feature = "unsafe-indexing"))]
-        {
-            &mut self.matrix[idx * self.n..(idx + 1) * self.n]
-        }
-        #[cfg(feature = "unsafe-indexing")]
-        unsafe {
-            self.matrix
-                .get_unchecked_mut(idx * self.n..(idx + 1) * self.n)
         }
     }
 }
@@ -360,12 +269,15 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
 
 // Determine calculation arguments and initialize calculation results
 fn init_variables(options: &CalculationOptions) -> (CalculationArguments, CalculationResults) {
-    let n: usize = (options.interlines * 8) + 9 - 1;
+    // matrix_size = (interlines * 8) + 9
+    let matrix_size: usize = (options.interlines * 8) + 9;
+    // keep `n` as number of spaces between lines (matrix_size - 1) to preserve original semantics
+    let n: usize = matrix_size - 1;
     let num_matrices: usize = match options.method {
         CalculationMethod::MethGaussSeidel => 1,
         CalculationMethod::MethJacobi => 2,
     };
-    let h: f64 = 1.0 as f64 / n as f64;
+    let h: f64 = 1.0f64 / n as f64;
     let arguments = CalculationArguments::new(n, num_matrices, h);
     let results = CalculationResults::new(0, 0, 0.0);
 
@@ -375,26 +287,17 @@ fn init_variables(options: &CalculationOptions) -> (CalculationArguments, Calcul
 // Initialize the matrix borders according to the used inference function
 fn init_matrices(arguments: &mut CalculationArguments, options: &CalculationOptions) {
     if options.inf_func == InferenceFunction::FuncF0 {
-        let matrix = &mut arguments.matrices;
+        let matrices = &mut arguments.matrices;
         let n = arguments.n;
         let h = arguments.h;
 
-        for g in 0..arguments.num_matrices as usize {
+        // matrices are shape (n+1, n+1)
+        for g in 0..arguments.num_matrices {
             for i in 0..(n + 1) {
-                #[cfg(not(feature = "C-style-indexing"))]
-                {
-                    matrix[g][[i, 0]] = 1.0 - (h * i as f64);
-                    matrix[g][[i, n]] = h * i as f64;
-                    matrix[g][[0, i]] = 1.0 - (h * i as f64);
-                    matrix[g][[n, i]] = h * i as f64;
-                }
-                #[cfg(feature = "C-style-indexing")]
-                {
-                    matrix[g][i][0] = 1.0 - (h * i as f64);
-                    matrix[g][i][n] = h * i as f64;
-                    matrix[g][0][i] = 1.0 - (h * i as f64);
-                    matrix[g][n][i] = h * i as f64;
-                }
+                matrices[g][[i, 0]] = 1.0 - (h * i as f64);
+                matrices[g][[i, n]] = h * i as f64;
+                matrices[g][[0, i]] = 1.0 - (h * i as f64);
+                matrices[g][[n, i]] = h * i as f64;
             }
         }
     }
@@ -448,36 +351,18 @@ fn calculate(
             }
 
             for j in 1..n {
-                #[cfg(not(feature = "C-style-indexing"))]
-                {
-                    star = 0.25
-                        * (matrix[m2][[i - 1, j]]
-                            + matrix[m2][[i, j - 1]]
-                            + matrix[m2][[i, j + 1]]
-                            + matrix[m2][[i + 1, j]]);
-                }
-                #[cfg(feature = "C-style-indexing")]
-                {
-                    star = 0.25
-                        * (matrix[m2][i - 1][j]
-                            + matrix[m2][i][j - 1]
-                            + matrix[m2][i][j + 1]
-                            + matrix[m2][i + 1][j]);
-                }
+                star = 0.25
+                    * (matrix[m2][[i - 1, j]]
+                        + matrix[m2][[i, j - 1]]
+                        + matrix[m2][[i, j + 1]]
+                        + matrix[m2][[i + 1, j]]);
 
                 if options.inf_func == InferenceFunction::FuncFPiSin {
                     star += fpisin_i * (pih * j as f64).sin();
                 }
 
                 if (options.termination == TerminationCondition::TermPrec) | (term_iteration == 1) {
-                    #[cfg(not(feature = "C-style-indexing"))]
-                    {
-                        residuum = (matrix[m2][[i, j]] - star).abs();
-                    }
-                    #[cfg(feature = "C-style-indexing")]
-                    {
-                        residuum = (matrix[m2][i][j] - star).abs();
-                    }
+                    residuum = (matrix[m2][[i, j]] - star).abs();
 
                     maxresiduum = match residuum {
                         r if r < maxresiduum => maxresiduum,
@@ -485,14 +370,7 @@ fn calculate(
                     };
                 }
 
-                #[cfg(not(feature = "C-style-indexing"))]
-                {
-                    matrix[m1][[i, j]] = star;
-                }
-                #[cfg(feature = "C-style-indexing")]
-                {
-                    matrix[m1][i][j] = star;
-                }
+                matrix[m1][[i, j]] = star;
             }
         }
 
@@ -581,24 +459,17 @@ fn display_matrix(
     results: &CalculationResults,
     options: &CalculationOptions,
 ) {
-    let matrix = &mut arguments.matrices[results.m as usize];
+    let matrix = &arguments.matrices[results.m as usize];
     let interlines = options.interlines;
 
     println!("");
     println!("Matrix:");
     for y in 0..9 as usize {
         for x in 0..9 as usize {
-            #[cfg(not(feature = "C-style-indexing"))]
-            {
-                print!(
-                    " {:.4}",
-                    matrix[[y * (interlines + 1), x * (interlines + 1)]]
-                );
-            }
-            #[cfg(feature = "C-style-indexing")]
-            {
-                print!(" {:.4}", matrix[y * (interlines + 1)][x * (interlines + 1)]);
-            }
+            print!(
+                " {:.4}",
+                matrix[[y * (interlines + 1), x * (interlines + 1)]]
+            );
         }
         print!("\n");
     }
