@@ -292,9 +292,9 @@ where
 // Parsing of command line arguments
 fn ask_params(mut args: std::env::Args) -> CalculationOptions {
     // TODO keep authors of original c version?
-    println!("============================================================");
-    println!("Program for calculation of partial differential equations.  ");
-    println!("============================================================");
+    // println!("============================================================");
+    // println!("Program for calculation of partial differential equations.  ");
+    // println!("============================================================");
     // println!("(c) Dr. Thomas Ludwig, TU München.");
     // println!("    Thomas A. Zochler, TU München.");
     // println!("    Andreas C. Schmidt, TU München.");
@@ -516,6 +516,13 @@ fn calculate(
     results.m = m2;
 }
 
+fn format_residuum(x: f64) -> String {
+    let s = format!("{:.6e}", x);
+    let (base, exp_str) = s.split_once('e').unwrap();
+    let exp: i32 = exp_str.parse().unwrap();
+    format!("{base}e{:+03}", exp)
+}
+
 // Display important information about the calculation
 fn display_statistics(
     arguments: &CalculationArguments,
@@ -525,27 +532,40 @@ fn display_statistics(
 ) {
     let n = arguments.n;
 
-    println!("Berechnungszeit:    {:.6}", duration.as_secs_f64());
+    println!("Calculation time:       {:.6} s", duration.as_secs_f64());
     println!(
-        "Speicherbedarf:     {:.4} MiB",
+        "Memory usage:           {:.6} MiB",
         ((n + 1) * (n + 1) * std::mem::size_of::<f64>() * arguments.num_matrices) as f64
             / 1024.0
             / 1024.0
     );
-    println!("Berechnungsmethode: {:?}", options.method);
-    println!("Interlines:         {}", options.interlines);
-    print!("Stoerfunktion:      ");
-    match options.inf_func {
-        InferenceFunction::FuncF0 => print!("f(x,y) = 0\n"),
-        InferenceFunction::FuncFPiSin => print!("f(x,y) = 2pi^2*sin(pi*x)sin(pi*y)\n"),
-    }
-    print!("Terminierung:       ");
-    match options.termination {
-        TerminationCondition::TermPrec => print!("Hinreichende Genauigkeit\n"),
-        TerminationCondition::TermIter => print!("Anzahl der Iterationen\n"),
-    }
-    println!("Anzahl Iterationen: {}", results.stat_iteration);
-    println!("Norm des Fehlers:   {:.6e}", results.stat_precision);
+    println!(
+        "Calculation method:     {}",
+        match options.method {
+            CalculationMethod::MethGaussSeidel => "Gauß-Seidel",
+            CalculationMethod::MethJacobi => "Jacobi",
+        }
+    );
+    println!("Interlines:             {}", options.interlines);
+    println!(
+        "Perturbation function:  {}",
+        match options.inf_func {
+            InferenceFunction::FuncF0 => "f(x,y) = 0",
+            InferenceFunction::FuncFPiSin => "f(x,y) = 2 * pi^2 * sin(pi * x) * sin(pi * y)",
+        }
+    );
+    println!(
+        "Termination:            {}",
+        match options.termination {
+            TerminationCondition::TermPrec => "Required accuracy",
+            TerminationCondition::TermIter => "Number of iterations",
+        }
+    );
+    println!("Number of iterations:   {}", results.stat_iteration);
+    println!(
+        "Residuum:               {}",
+        format_residuum(results.stat_precision)
+    );
 }
 
 // Beschreibung der Funktion displayMatrix:
@@ -564,6 +584,7 @@ fn display_matrix(
     let matrix = &mut arguments.matrices[results.m as usize];
     let interlines = options.interlines;
 
+    println!("");
     println!("Matrix:");
     for y in 0..9 as usize {
         for x in 0..9 as usize {
