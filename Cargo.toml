@@ -9,7 +9,5 @@ edition = "2018"
 [features]
 
 default = []
-C-style-indexing = []
-unsafe-indexing = []
 
 [dependencies]
