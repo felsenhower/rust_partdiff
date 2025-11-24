@@ -271,7 +271,7 @@ fn ask_params(mut args: std::env::Args) -> Result<CalculationOptions, String> {
                 interlines,
                 pert_func,
                 termination,
-                std::u64::MAX,
+                u64::MAX,
                 acc,
             ))
         }
