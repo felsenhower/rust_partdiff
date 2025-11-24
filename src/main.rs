@@ -232,7 +232,7 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
     match termination {
         TerminationCondition::TermPrec => {
             let prec: f64 = parse_arg(args.next());
-            if (prec < 1e-20) | (prec > 1e-4) {
+            if (prec < 1e-20) || (prec > 1e-4) {
                 eprintln!("Error: termination precision must be between 1e-20 and 1e-4");
                 usage();
                 process::exit(1);
@@ -323,14 +323,8 @@ fn calculate_gauss_seidel(
 
     let mut term_iteration = options.term_iteration;
 
-    // for distinguishing between old and new state of the matrix if two matrices are used
-    let mut m1: usize = 0;
-    let mut m2: usize = 0;
-
-    if options.method == CalculationMethod::MethJacobi {
-        m1 = 0;
-        m2 = 1;
-    }
+    // Gauss-Seidel works in-place on a single matrix
+    let mat = &mut arguments.matrices[0];
 
     if options.inf_func == InferenceFunction::FuncFPiSin {
         pih = PI * h;
@@ -338,8 +332,6 @@ fn calculate_gauss_seidel(
     }
 
     while term_iteration > 0 {
-        let matrix = &mut arguments.matrices;
-
         maxresiduum = 0.0;
 
         for i in 1..n {
@@ -350,18 +342,17 @@ fn calculate_gauss_seidel(
             }
 
             for j in 1..n {
-                star = 0.25
-                    * (matrix[m2][[i - 1, j]]
-                        + matrix[m2][[i, j - 1]]
-                        + matrix[m2][[i, j + 1]]
-                        + matrix[m2][[i + 1, j]]);
+                let old = mat[[i, j]];
+                star =
+                    0.25 * (mat[[i - 1, j]] + mat[[i, j - 1]] + mat[[i, j + 1]] + mat[[i + 1, j]]);
 
                 if options.inf_func == InferenceFunction::FuncFPiSin {
                     star += fpisin_i * (pih * j as f64).sin();
                 }
 
-                if (options.termination == TerminationCondition::TermPrec) | (term_iteration == 1) {
-                    residuum = (matrix[m2][[i, j]] - star).abs();
+                if (options.termination == TerminationCondition::TermPrec) || (term_iteration == 1)
+                {
+                    residuum = (old - star).abs();
 
                     maxresiduum = match residuum {
                         r if r < maxresiduum => maxresiduum,
@@ -369,16 +360,12 @@ fn calculate_gauss_seidel(
                     };
                 }
 
-                matrix[m1][[i, j]] = star;
+                mat[[i, j]] = star;
             }
         }
 
         results.stat_iteration += 1;
         results.stat_precision = maxresiduum;
-
-        let tmp = m1;
-        m1 = m2;
-        m2 = tmp;
 
         match options.termination {
             TerminationCondition::TermPrec => {
@@ -390,7 +377,7 @@ fn calculate_gauss_seidel(
         }
     }
 
-    results.m = m2;
+    results.m = 0;
 }
 
 fn calculate_jacobi(
@@ -413,14 +400,9 @@ fn calculate_jacobi(
 
     let mut term_iteration = options.term_iteration;
 
-    // for distinguishing between old and new state of the matrix if two matrices are used
+    // Jacobi requires two matrices: read from m2, write to m1
     let mut m1: usize = 0;
-    let mut m2: usize = 0;
-
-    if options.method == CalculationMethod::MethJacobi {
-        m1 = 0;
-        m2 = 1;
-    }
+    let mut m2: usize = 1;
 
     if options.inf_func == InferenceFunction::FuncFPiSin {
         pih = PI * h;
@@ -450,7 +432,8 @@ fn calculate_jacobi(
                     star += fpisin_i * (pih * j as f64).sin();
                 }
 
-                if (options.termination == TerminationCondition::TermPrec) | (term_iteration == 1) {
+                if (options.termination == TerminationCondition::TermPrec) || (term_iteration == 1)
+                {
                     residuum = (matrix[m2][[i, j]] - star).abs();
 
                     maxresiduum = match residuum {
@@ -466,6 +449,7 @@ fn calculate_jacobi(
         results.stat_iteration += 1;
         results.stat_precision = maxresiduum;
 
+        // swap read/write matrices
         let tmp = m1;
         m1 = m2;
         m2 = tmp;
