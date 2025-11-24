@@ -259,7 +259,7 @@ fn ask_params(mut args: std::env::Args) -> Result<CalculationOptions, String> {
     match termination {
         TerminationCondition::TermAcc => {
             let acc: f64 = parse_arg(args.next())?;
-            if (acc < 1e-20) | (acc > 1e-4) {
+            if (acc < 1e-20) || (acc > 1e-4) {
                 usage();
                 return Err(
                     "Error: termination accuracy must be between 1e-20 and 1e-4".to_string()
@@ -384,7 +384,7 @@ fn calculate(
                     star += fpisin_i * (pih * j as f64).sin();
                 }
 
-                if (options.termination == TerminationCondition::TermAcc) | (term_iteration == 1) {
+                if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
                     residuum = (matrix[[m2, i, j]] - star).abs();
 
                     maxresiduum = match residuum {
