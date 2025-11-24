@@ -2,7 +2,7 @@ use std::env;
 use std::process;
 use std::time::{Duration, Instant};
 
-use ndarray::Array2;
+use ndarray::Array3;
 
 // The supported calculation Algorithms
 // Gauss Seidel working on the same matrix
@@ -116,21 +116,17 @@ impl CalculationOptions {
 // Data structure for storing the the data needed during calculation
 #[derive(Debug)]
 struct CalculationArguments {
-    n: usize,                   // Number of spaces between lines (lines=n+1)
-    num_matrices: usize,        // number of matrices
-    h: f64,                     // length of a space between two lines
-    matrices: Vec<Array2<f64>>, // The matrices for calculation (ndarray 2D arrays)
+    n: usize,              // Number of spaces between lines (lines=n+1)
+    num_matrices: usize,   // number of matrices
+    h: f64,                // length of a space between two lines
+    matrices: Array3<f64>, // The matrices for calculation (ndarray 3D array)
 }
 
 impl CalculationArguments {
     fn new(n: usize, num_matrices: usize, h: f64) -> CalculationArguments {
-        // We'll allocate matrices with shape (n+1, n+1), where `n` here is the number of spaces
-        // between lines and the total matrix dimension is (n+1).
-        let mut matrices: Vec<Array2<f64>> = Vec::with_capacity(num_matrices);
+        // We'll allocate matrices with shape (num_matrices, n+1, n+1).
         let dim = n + 1;
-        for _ in 0..num_matrices {
-            matrices.push(Array2::<f64>::zeros((dim, dim)));
-        }
+        let matrices = Array3::<f64>::zeros((num_matrices, dim, dim));
 
         CalculationArguments {
             n,
@@ -291,14 +287,14 @@ fn init_matrices(arguments: &mut CalculationArguments, options: &CalculationOpti
         let n = arguments.n;
         let h = arguments.h;
 
-        // matrices are shape (n+1, n+1)
+        // matrices are shape (num_matrices, n+1, n+1)
         for g in 0..arguments.num_matrices {
             for i in 0..(n + 1) {
                 unsafe {
-                    *matrices[g].uget_mut([i, 0]) = 1.0 - (h * i as f64);
-                    *matrices[g].uget_mut([i, n]) = h * i as f64;
-                    *matrices[g].uget_mut([0, i]) = 1.0 - (h * i as f64);
-                    *matrices[g].uget_mut([n, i]) = h * i as f64;
+                    *matrices.uget_mut([g, i, 0]) = 1.0 - (h * i as f64);
+                    *matrices.uget_mut([g, i, n]) = h * i as f64;
+                    *matrices.uget_mut([g, 0, i]) = 1.0 - (h * i as f64);
+                    *matrices.uget_mut([g, n, i]) = h * i as f64;
                 }
             }
         }
@@ -341,7 +337,7 @@ fn calculate(
     }
 
     while term_iteration > 0 {
-        let matrix = &mut arguments.matrices;
+        let matrices = &mut arguments.matrices;
 
         maxresiduum = 0.0;
 
@@ -355,10 +351,10 @@ fn calculate(
             for j in 1..n {
                 unsafe {
                     star = 0.25
-                        * (*matrix[m2].uget([i - 1, j])
-                            + *matrix[m2].uget([i, j - 1])
-                            + *matrix[m2].uget([i, j + 1])
-                            + *matrix[m2].uget([i + 1, j]));
+                        * (*matrices.uget([m2, i - 1, j])
+                            + *matrices.uget([m2, i, j - 1])
+                            + *matrices.uget([m2, i, j + 1])
+                            + *matrices.uget([m2, i + 1, j]));
                 }
 
                 if options.inf_func == InferenceFunction::FuncFPiSin {
@@ -366,7 +362,7 @@ fn calculate(
                 }
 
                 if (options.termination == TerminationCondition::TermPrec) | (term_iteration == 1) {
-                    residuum = unsafe { (*matrix[m2].uget([i, j]) - star).abs() };
+                    residuum = unsafe { (*matrices.uget([m2, i, j]) - star).abs() };
 
                     maxresiduum = match residuum {
                         r if r < maxresiduum => maxresiduum,
@@ -375,7 +371,7 @@ fn calculate(
                 }
 
                 unsafe {
-                    *matrix[m1].uget_mut([i, j]) = star;
+                    *matrices.uget_mut([m1, i, j]) = star;
                 }
             }
         }
@@ -465,16 +461,20 @@ fn display_matrix(
     results: &CalculationResults,
     options: &CalculationOptions,
 ) {
-    let matrix = &arguments.matrices[results.m as usize];
     let interlines = options.interlines;
 
     println!("");
     println!("Matrix:");
     for y in 0..9 as usize {
         for x in 0..9 as usize {
-            print!(" {:.4}", unsafe {
-                *matrix.uget([y * (interlines + 1), x * (interlines + 1)])
-            });
+            let val = unsafe {
+                *arguments.matrices.uget([
+                    results.m as usize,
+                    y * (interlines + 1),
+                    x * (interlines + 1),
+                ])
+            };
+            print!(" {:.4}", val);
         }
         print!("\n");
     }
