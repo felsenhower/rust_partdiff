@@ -55,11 +55,11 @@ impl std::str::FromStr for InferenceFunction {
 }
 
 // The supported termination conditions
-// TermPrec: terminate after set precision is reached
+// TermAcc: terminate after set accuracy is reached
 // TermIter: terminate after set amount of iterations
 #[derive(Debug, PartialEq)]
 enum TerminationCondition {
-    TermPrec,
+    TermAcc,
     TermIter,
 }
 
@@ -69,7 +69,7 @@ impl std::str::FromStr for TerminationCondition {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "TermPrec" | "1" => Ok(TerminationCondition::TermPrec),
+            "TermAcc" | "1" => Ok(TerminationCondition::TermAcc),
             "TermIter" | "2" => Ok(TerminationCondition::TermIter),
             _ => Err(format!(
                 "'{}' is not a valid value for TerminationCondition",
@@ -88,7 +88,7 @@ struct CalculationOptions {
     inf_func: InferenceFunction,       // inference function
     termination: TerminationCondition, // termination condition
     term_iteration: u64,               // terminate if iteration number reached
-    term_precision: f64,               // terminate if precision reached
+    term_accuracy: f64,                // terminate if accuracy reached
 }
 
 impl CalculationOptions {
@@ -99,7 +99,7 @@ impl CalculationOptions {
         inf_func: InferenceFunction,
         termination: TerminationCondition,
         term_iteration: u64,
-        term_precision: f64,
+        term_accuracy: f64,
     ) -> CalculationOptions {
         CalculationOptions {
             _number,
@@ -108,7 +108,7 @@ impl CalculationOptions {
             inf_func,
             termination,
             term_iteration,
-            term_precision,
+            term_accuracy,
         }
     }
 }
@@ -140,15 +140,15 @@ impl CalculationArguments {
 struct CalculationResults {
     m: usize,            // Index of matrix that holds the final state
     stat_iteration: u64, // number of current iteration
-    stat_precision: f64, // actual precision of all slaces in iteration
+    stat_accuracy: f64,  // actual accuracy of all slaces in iteration
 }
 
 impl CalculationResults {
-    fn new(m: usize, stat_iteration: u64, stat_precision: f64) -> CalculationResults {
+    fn new(m: usize, stat_iteration: u64, stat_accuracy: f64) -> CalculationResults {
         CalculationResults {
             m,
             stat_iteration,
-            stat_precision,
+            stat_accuracy,
         }
     }
 }
@@ -191,18 +191,18 @@ impl IndexMut<[usize; 3]> for PartdiffTensor {
 // Display help message to show the required command line arguments to run the binary
 fn usage() {
     println!(
-        "Usage: ./rust_partdiff [number] [method] [interlines] [func] [termination] [prec/iter]\n"
+        "Usage: ./rust_partdiff [number] [method] [interlines] [func] [termination] [acc/iter]\n"
     );
     println!("  -number:      number of threads (1 .. n)");
     println!("  -method:      calculation method (MethGaussSeidel/MethJacobi OR 1/2)");
     println!("  -interlines:  number of interlines (1 .. n)");
     println!("                  matrixsize = (interlines * 8) + 9");
     println!("  -func:        inference function (FuncF0/FuncFPiSin OR 1/2)");
-    println!("  -termination: termination condition (TermPrec/TermIter OR 1/2)");
-    println!("                  TermPrec: sufficient precision");
+    println!("  -termination: termination condition (TermAcc/TermIter OR 1/2)");
+    println!("                  TermAcc: sufficient accuracy");
     println!("                  TermIter: number of iterations");
-    println!("  -prec/iter:   depending on termination:");
-    println!("                  precision: 1e-4 .. 1e-20");
+    println!("  -acc/iter:    depending on termination:");
+    println!("                  accuracy: 1e-4 .. 1e-20");
     println!("                  iterations: 1 .. n");
 }
 
@@ -259,10 +259,10 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
 
     // Check for the meaning of the last argument
     match termination {
-        TerminationCondition::TermPrec => {
-            let prec: f64 = parse_arg(args.next());
-            if (prec < 1e-20) | (prec > 1e-4) {
-                eprintln!("Error: termination precision must be between 1e-20 and 1e-4");
+        TerminationCondition::TermAcc => {
+            let acc: f64 = parse_arg(args.next());
+            if (acc < 1e-20) | (acc > 1e-4) {
+                eprintln!("Error: termination accuracy must be between 1e-20 and 1e-4");
                 usage();
                 process::exit(1);
             }
@@ -273,7 +273,7 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
                 inf_func,
                 termination,
                 std::u64::MAX,
-                prec,
+                acc,
             );
         }
         TerminationCondition::TermIter => {
@@ -386,7 +386,7 @@ fn calculate(
                     star += fpisin_i * (pih * j as f64).sin();
                 }
 
-                if (options.termination == TerminationCondition::TermPrec) | (term_iteration == 1) {
+                if (options.termination == TerminationCondition::TermAcc) | (term_iteration == 1) {
                     residuum = (matrix[[m2, i, j]] - star).abs();
 
                     maxresiduum = match residuum {
@@ -400,15 +400,15 @@ fn calculate(
         }
 
         results.stat_iteration += 1;
-        results.stat_precision = maxresiduum;
+        results.stat_accuracy = maxresiduum;
 
         let tmp = m1;
         m1 = m2;
         m2 = tmp;
 
         match options.termination {
-            TerminationCondition::TermPrec => {
-                if maxresiduum < options.term_precision {
+            TerminationCondition::TermAcc => {
+                if maxresiduum < options.term_accuracy {
                     term_iteration = 0;
                 }
             }
@@ -460,14 +460,14 @@ fn display_statistics(
     println!(
         "Termination:            {}",
         match options.termination {
-            TerminationCondition::TermPrec => "Required accuracy",
+            TerminationCondition::TermAcc => "Required accuracy",
             TerminationCondition::TermIter => "Number of iterations",
         }
     );
     println!("Number of iterations:   {}", results.stat_iteration);
     println!(
         "Residuum:               {}",
-        format_residuum(results.stat_precision)
+        format_residuum(results.stat_accuracy)
     );
 }
 
