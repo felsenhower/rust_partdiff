@@ -294,10 +294,12 @@ fn init_matrices(arguments: &mut CalculationArguments, options: &CalculationOpti
         // matrices are shape (n+1, n+1)
         for g in 0..arguments.num_matrices {
             for i in 0..(n + 1) {
-                matrices[g][[i, 0]] = 1.0 - (h * i as f64);
-                matrices[g][[i, n]] = h * i as f64;
-                matrices[g][[0, i]] = 1.0 - (h * i as f64);
-                matrices[g][[n, i]] = h * i as f64;
+                unsafe {
+                    *matrices[g].uget_mut([i, 0]) = 1.0 - (h * i as f64);
+                    *matrices[g].uget_mut([i, n]) = h * i as f64;
+                    *matrices[g].uget_mut([0, i]) = 1.0 - (h * i as f64);
+                    *matrices[g].uget_mut([n, i]) = h * i as f64;
+                }
             }
         }
     }
@@ -351,18 +353,20 @@ fn calculate(
             }
 
             for j in 1..n {
-                star = 0.25
-                    * (matrix[m2][[i - 1, j]]
-                        + matrix[m2][[i, j - 1]]
-                        + matrix[m2][[i, j + 1]]
-                        + matrix[m2][[i + 1, j]]);
+                unsafe {
+                    star = 0.25
+                        * (*matrix[m2].uget([i - 1, j])
+                            + *matrix[m2].uget([i, j - 1])
+                            + *matrix[m2].uget([i, j + 1])
+                            + *matrix[m2].uget([i + 1, j]));
+                }
 
                 if options.inf_func == InferenceFunction::FuncFPiSin {
                     star += fpisin_i * (pih * j as f64).sin();
                 }
 
                 if (options.termination == TerminationCondition::TermPrec) | (term_iteration == 1) {
-                    residuum = (matrix[m2][[i, j]] - star).abs();
+                    residuum = unsafe { (*matrix[m2].uget([i, j]) - star).abs() };
 
                     maxresiduum = match residuum {
                         r if r < maxresiduum => maxresiduum,
@@ -370,7 +374,9 @@ fn calculate(
                     };
                 }
 
-                matrix[m1][[i, j]] = star;
+                unsafe {
+                    *matrix[m1].uget_mut([i, j]) = star;
+                }
             }
         }
 
@@ -466,10 +472,9 @@ fn display_matrix(
     println!("Matrix:");
     for y in 0..9 as usize {
         for x in 0..9 as usize {
-            print!(
-                " {:.4}",
-                matrix[[y * (interlines + 1), x * (interlines + 1)]]
-            );
+            print!(" {:.4}", unsafe {
+                *matrix.uget([y * (interlines + 1), x * (interlines + 1)])
+            });
         }
         print!("\n");
     }
