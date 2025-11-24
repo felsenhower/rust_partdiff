@@ -1,6 +1,5 @@
 use std::env;
 use std::ops::{Index, IndexMut};
-use std::process;
 use std::time::{Duration, Instant};
 use std::vec;
 
@@ -207,28 +206,28 @@ fn usage() {
 }
 
 // Helper function to parse command line arguments
-fn parse_arg<U>(arg: Option<String>) -> U
+fn parse_arg<U>(arg: Option<String>) -> Result<U, String>
 where
     U: std::str::FromStr,
     <U as std::str::FromStr>::Err: std::fmt::Display,
 {
-    let ret: U = match arg {
-        Some(a) => a.parse().unwrap_or_else(|error| {
-            eprintln!("Error: {}", error);
-            usage();
-            process::exit(1);
-        }),
+    match arg {
+        Some(a) => match a.parse() {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                usage();
+                Err(format!("Error: {}", e))
+            }
+        },
         None => {
-            eprintln!("Error: incomplete arguments.");
             usage();
-            process::exit(1);
+            Err("Error: incomplete arguments.".to_string())
         }
-    };
-    ret
+    }
 }
 
 // Parsing of command line arguments
-fn ask_params(mut args: std::env::Args) -> CalculationOptions {
+fn ask_params(mut args: std::env::Args) -> Result<CalculationOptions, String> {
     // TODO keep authors of original c version?
     // println!("============================================================");
     // println!("Program for calculation of partial differential equations.  ");
@@ -242,31 +241,31 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
 
     args.next();
 
-    let number: u64 = parse_arg(args.next());
+    let number: u64 = parse_arg(args.next())?;
     if number < 1 {
-        eprintln!("Error number argument must be a positive integer");
         usage();
-        process::exit(1);
+        return Err("Error number argument must be a positive integer".to_string());
     }
 
-    let method: CalculationMethod = parse_arg(args.next());
+    let method: CalculationMethod = parse_arg(args.next())?;
 
-    let interlines: usize = parse_arg(args.next());
+    let interlines: usize = parse_arg(args.next())?;
 
-    let pert_func: PerturbationFunction = parse_arg(args.next());
+    let pert_func: PerturbationFunction = parse_arg(args.next())?;
 
-    let termination: TerminationCondition = parse_arg(args.next());
+    let termination: TerminationCondition = parse_arg(args.next())?;
 
     // Check for the meaning of the last argument
     match termination {
         TerminationCondition::TermAcc => {
-            let acc: f64 = parse_arg(args.next());
+            let acc: f64 = parse_arg(args.next())?;
             if (acc < 1e-20) | (acc > 1e-4) {
-                eprintln!("Error: termination accuracy must be between 1e-20 and 1e-4");
                 usage();
-                process::exit(1);
+                return Err(
+                    "Error: termination accuracy must be between 1e-20 and 1e-4".to_string()
+                );
             }
-            return CalculationOptions::new(
+            Ok(CalculationOptions::new(
                 number,
                 method,
                 interlines,
@@ -274,16 +273,15 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
                 termination,
                 std::u64::MAX,
                 acc,
-            );
+            ))
         }
         TerminationCondition::TermIter => {
-            let iterations = parse_arg(args.next());
+            let iterations: u64 = parse_arg(args.next())?;
             if iterations < 1 {
-                eprintln!("Error: termination iterations must be > 0");
                 usage();
-                process::exit(1);
+                return Err("Error: termination iterations must be > 0".to_string());
             }
-            return CalculationOptions::new(
+            Ok(CalculationOptions::new(
                 number,
                 method,
                 interlines,
@@ -291,7 +289,7 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
                 termination,
                 iterations,
                 0.0,
-            );
+            ))
         }
     }
 }
@@ -500,8 +498,8 @@ fn display_matrix(
     }
 }
 
-fn main() {
-    let options = ask_params(env::args());
+fn main() -> Result<(), String> {
+    let options = ask_params(env::args())?;
     let (mut arguments, mut results) = init_variables(&options);
     init_matrices(&mut arguments, &options);
     let now = Instant::now();
@@ -509,4 +507,5 @@ fn main() {
     let duration = now.elapsed();
     display_statistics(&arguments, &results, &options, duration);
     display_matrix(&mut arguments, &results, &options);
+    Ok(())
 }
