@@ -417,11 +417,12 @@ fn calculate(
     results.m = m2;
 }
 
-fn format_residuum(x: f64) -> String {
+fn format_residuum(x: f64) -> Result<String, String> {
     let s = format!("{:.6e}", x);
-    let (base, exp_str) = s.split_once('e').unwrap();
-    let exp: i32 = exp_str.parse().unwrap();
-    format!("{base}e{:+03}", exp)
+    let err_msg = "format!() returned an unexpected value.";
+    let (base, exp_str) = s.split_once('e').ok_or(err_msg)?;
+    let exp: i32 = exp_str.parse().map_err(|_| err_msg)?;
+    Ok(format!("{base}e{:+03}", exp))
 }
 
 // Display important information about the calculation
@@ -430,7 +431,7 @@ fn display_statistics(
     results: &CalculationResults,
     options: &CalculationOptions,
     duration: Duration,
-) {
+) -> Result<(), String> {
     let n = arguments.n;
 
     println!("Calculation time:       {:.6} s", duration.as_secs_f64());
@@ -465,8 +466,9 @@ fn display_statistics(
     println!("Number of iterations:   {}", results.stat_iteration);
     println!(
         "Residuum:               {}",
-        format_residuum(results.stat_accuracy)
+        format_residuum(results.stat_accuracy)?
     );
+    Ok(())
 }
 
 // Beschreibung der Funktion displayMatrix:
@@ -505,7 +507,7 @@ fn main() -> Result<(), String> {
     let now = Instant::now();
     calculate(&mut arguments, &mut results, &options);
     let duration = now.elapsed();
-    display_statistics(&arguments, &results, &options, duration);
+    display_statistics(&arguments, &results, &options, duration)?;
     display_matrix(&mut arguments, &results, &options);
     Ok(())
 }
