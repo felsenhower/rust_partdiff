@@ -29,25 +29,25 @@ impl std::str::FromStr for CalculationMethod {
     }
 }
 
-// The supported inference functions used during calculation
+// The supported perturbation functions used during calculation
 // F0:     f(x,y) = 0
 // FPiSin: f(x,y) = 2pi^2*sin(pi*x)sin(pi*y)
 #[derive(Debug, PartialEq)]
-enum InferenceFunction {
+enum PerturbationFunction {
     FuncF0,
     FuncFPiSin,
 }
 
 // For parsing command line arguments
-impl std::str::FromStr for InferenceFunction {
+impl std::str::FromStr for PerturbationFunction {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "FuncF0" | "1" => Ok(InferenceFunction::FuncF0),
-            "FuncFPiSin" | "2" => Ok(InferenceFunction::FuncFPiSin),
+            "FuncF0" | "1" => Ok(PerturbationFunction::FuncF0),
+            "FuncFPiSin" | "2" => Ok(PerturbationFunction::FuncFPiSin),
             _ => Err(format!(
-                "'{}' is not a valid value for InferenceFunction",
+                "'{}' is not a valid value for PerturbationFunction",
                 s
             )),
         }
@@ -85,7 +85,7 @@ struct CalculationOptions {
     _number: u64,                      // number of threads
     method: CalculationMethod,         // Gauss Seidel or Jacobi method of iteration
     interlines: usize,                 // matrix size = interline*8+9
-    inf_func: InferenceFunction,       // inference function
+    pert_func: PerturbationFunction,   // perturbation function
     termination: TerminationCondition, // termination condition
     term_iteration: u64,               // terminate if iteration number reached
     term_accuracy: f64,                // terminate if accuracy reached
@@ -96,7 +96,7 @@ impl CalculationOptions {
         _number: u64,
         method: CalculationMethod,
         interlines: usize,
-        inf_func: InferenceFunction,
+        pert_func: PerturbationFunction,
         termination: TerminationCondition,
         term_iteration: u64,
         term_accuracy: f64,
@@ -105,7 +105,7 @@ impl CalculationOptions {
             _number,
             method,
             interlines,
-            inf_func,
+            pert_func,
             termination,
             term_iteration,
             term_accuracy,
@@ -197,7 +197,7 @@ fn usage() {
     println!("  -method:      calculation method (MethGaussSeidel/MethJacobi OR 1/2)");
     println!("  -interlines:  number of interlines (1 .. n)");
     println!("                  matrixsize = (interlines * 8) + 9");
-    println!("  -func:        inference function (FuncF0/FuncFPiSin OR 1/2)");
+    println!("  -func:        perturbation function (FuncF0/FuncFPiSin OR 1/2)");
     println!("  -termination: termination condition (TermAcc/TermIter OR 1/2)");
     println!("                  TermAcc: sufficient accuracy");
     println!("                  TermIter: number of iterations");
@@ -253,7 +253,7 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
 
     let interlines: usize = parse_arg(args.next());
 
-    let inf_func: InferenceFunction = parse_arg(args.next());
+    let pert_func: PerturbationFunction = parse_arg(args.next());
 
     let termination: TerminationCondition = parse_arg(args.next());
 
@@ -270,7 +270,7 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
                 number,
                 method,
                 interlines,
-                inf_func,
+                pert_func,
                 termination,
                 std::u64::MAX,
                 acc,
@@ -287,7 +287,7 @@ fn ask_params(mut args: std::env::Args) -> CalculationOptions {
                 number,
                 method,
                 interlines,
-                inf_func,
+                pert_func,
                 termination,
                 iterations,
                 0.0,
@@ -310,9 +310,9 @@ fn init_variables(options: &CalculationOptions) -> (CalculationArguments, Calcul
     (arguments, results)
 }
 
-// Initialize the matrix borders according to the used inference function
+// Initialize the matrix borders according to the used perturbation function
 fn init_matrices(arguments: &mut CalculationArguments, options: &CalculationOptions) {
-    if options.inf_func == InferenceFunction::FuncF0 {
+    if options.pert_func == PerturbationFunction::FuncF0 {
         let matrix = &mut arguments.matrices;
         let n = arguments.n;
         let h = arguments.h;
@@ -358,7 +358,7 @@ fn calculate(
         m2 = 1;
     }
 
-    if options.inf_func == InferenceFunction::FuncFPiSin {
+    if options.pert_func == PerturbationFunction::FuncFPiSin {
         pih = PI * h;
         fpisin = 0.25 * TWO_PI_SQUARE * h * h;
     }
@@ -371,7 +371,7 @@ fn calculate(
         for i in 1..n {
             let mut fpisin_i = 0.0;
 
-            if options.inf_func == InferenceFunction::FuncFPiSin {
+            if options.pert_func == PerturbationFunction::FuncFPiSin {
                 fpisin_i = fpisin * (pih * i as f64).sin();
             }
 
@@ -382,7 +382,7 @@ fn calculate(
                         + matrix[[m2, i, j + 1]]
                         + matrix[[m2, i + 1, j]]);
 
-                if options.inf_func == InferenceFunction::FuncFPiSin {
+                if options.pert_func == PerturbationFunction::FuncFPiSin {
                     star += fpisin_i * (pih * j as f64).sin();
                 }
 
@@ -452,9 +452,9 @@ fn display_statistics(
     println!("Interlines:             {}", options.interlines);
     println!(
         "Perturbation function:  {}",
-        match options.inf_func {
-            InferenceFunction::FuncF0 => "f(x,y) = 0",
-            InferenceFunction::FuncFPiSin => "f(x,y) = 2 * pi^2 * sin(pi * x) * sin(pi * y)",
+        match options.pert_func {
+            PerturbationFunction::FuncF0 => "f(x,y) = 0",
+            PerturbationFunction::FuncFPiSin => "f(x,y) = 2 * pi^2 * sin(pi * x) * sin(pi * y)",
         }
     );
     println!(
