@@ -1,4 +1,4 @@
-use ndarray::{Array2, Array3};
+use ndarray::{s, Array2, Array3, ArrayView2, ArrayViewMut2, Zip};
 use std::env;
 use std::time::{Duration, Instant};
 
@@ -376,14 +376,18 @@ fn calculate_jacobi(
     let n = arguments.n;
     let h = arguments.h;
 
-    let mut star: f64;
-    let mut residuum: f64;
     let mut maxresiduum: f64;
 
     let mut term_iteration = options.term_iteration;
 
+    // for distinguishing between old and new state of the matrix if two matrices are used
     let mut m1: usize = 0;
-    let mut m2: usize = 1;
+    let mut m2: usize = 0;
+
+    if options.method == CalculationMethod::MethJacobi {
+        m1 = 0;
+        m2 = 1;
+    }
 
     let mut pert_func_matrix: Array2<f64> = Array2::<f64>::zeros((n + 1, n + 1));
     if options.pert_func == PerturbationFunction::FuncFPiSin {
@@ -405,32 +409,60 @@ fn calculate_jacobi(
     while term_iteration > 0 {
         let matrix = &mut arguments.matrices;
 
+        let (mut new, old) = unsafe {
+            let ptr = matrix.as_mut_ptr();
+            match (m1, m2) {
+                (0, 1) => {
+                    let new = ArrayViewMut2::from_shape_ptr((n + 1, n + 1), ptr);
+                    let old =
+                        ArrayView2::from_shape_ptr((n + 1, n + 1), ptr.add((n + 1) * (n + 1)));
+                    (new, old)
+                }
+                (1, 0) => {
+                    let old = ArrayView2::from_shape_ptr((n + 1, n + 1), ptr);
+                    let new =
+                        ArrayViewMut2::from_shape_ptr((n + 1, n + 1), ptr.add((n + 1) * (n + 1)));
+                    (new, old)
+                }
+                _ => unreachable!(),
+            }
+        };
+
         maxresiduum = 0.0;
 
-        for i in 1..n {
-            for j in 1..n {
-                star = 0.25
-                    * (unsafe {
-                        matrix.uget([m2, i - 1, j])
-                            + matrix.uget([m2, i, j - 1])
-                            + matrix.uget([m2, i, j + 1])
-                            + matrix.uget([m2, i + 1, j])
-                    });
+        let mut interior_new = new.slice_mut(s![1..n, 1..n]);
+        let center = old.slice(s![1..n, 1..n]);
+        let up = old.slice(s![0..n - 1, 1..n]);
+        let down = old.slice(s![2..n + 1, 1..n]);
+        let left = old.slice(s![1..n, 0..n - 1]);
+        let right = old.slice(s![1..n, 2..n + 1]);
+        let pert = pert_func_matrix.slice(s![1..n, 1..n]);
 
-                star += unsafe { pert_func_matrix.uget((i, j)) };
-                if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
-                    residuum = ((unsafe { *matrix.uget([m2, i, j]) }) - star).abs();
+        let mut star_matrix: Array2<f64> = Array2::<f64>::zeros((n - 1, n - 1));
+        Zip::from(&mut star_matrix)
+            .and(&up)
+            .and(&down)
+            .and(&left)
+            .and(&right)
+            .and(&pert)
+            .for_each(|star, &u, &d, &l, &r, &p| {
+                *star = 0.25 * (u + l + r + d) + p;
+            });
 
-                    maxresiduum = match residuum {
-                        r if r < maxresiduum => maxresiduum,
-                        _ => residuum,
-                    };
-                }
-                unsafe {
-                    *matrix.uget_mut([m1, i, j]) = star;
-                }
+        Zip::from(&star_matrix).and(&center).for_each(|&star, &c| {
+            if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
+                let residuum = (c - star).abs();
+                maxresiduum = match residuum {
+                    r if r < maxresiduum => maxresiduum,
+                    _ => residuum,
+                };
             }
-        }
+        });
+        Zip::from(&mut interior_new)
+            .and(&star_matrix)
+            .for_each(|new, &star| {
+                *new = star;
+            });
 
         results.stat_iteration += 1;
         results.stat_accuracy = maxresiduum;
