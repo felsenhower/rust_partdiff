@@ -1,4 +1,4 @@
-use ndarray::Array3;
+use ndarray::{Array2, Array3};
 use std::env;
 use std::time::{Duration, Instant};
 
@@ -297,18 +297,12 @@ fn calculate(
     results: &mut CalculationResults,
     options: &CalculationOptions,
 ) {
-    const PI: f64 = 3.141592653589793;
-    const TWO_PI_SQUARE: f64 = 2.0 * PI * PI;
-
     let n = arguments.n;
     let h = arguments.h;
 
     let mut star: f64;
     let mut residuum: f64;
     let mut maxresiduum: f64;
-
-    let mut pih: f64 = 0.0;
-    let mut fpisin: f64 = 0.0;
 
     let mut term_iteration = options.term_iteration;
 
@@ -321,9 +315,21 @@ fn calculate(
         m2 = 1;
     }
 
+    let mut pert_func_matrix: Array2<f64> = Array2::<f64>::zeros((n + 1, n + 1));
     if options.pert_func == PerturbationFunction::FuncFPiSin {
-        pih = PI * h;
-        fpisin = 0.25 * TWO_PI_SQUARE * h * h;
+        const PI: f64 = 3.141592653589793;
+        const TWO_PI_SQUARE: f64 = 2.0 * PI * PI;
+        let pih: f64 = PI * h;
+        let fpisin: f64 = 0.25 * TWO_PI_SQUARE * h * h;
+        for i in 1..n {
+            let fpisin_i = fpisin * (pih * i as f64).sin();
+            for j in 1..n {
+                let perturbation = fpisin_i * (pih * j as f64).sin();
+                unsafe {
+                    *pert_func_matrix.uget_mut((i, j)) = perturbation;
+                }
+            }
+        }
     }
 
     while term_iteration > 0 {
@@ -332,12 +338,6 @@ fn calculate(
         maxresiduum = 0.0;
 
         for i in 1..n {
-            let mut fpisin_i = 0.0;
-
-            if options.pert_func == PerturbationFunction::FuncFPiSin {
-                fpisin_i = fpisin * (pih * i as f64).sin();
-            }
-
             for j in 1..n {
                 star = 0.25
                     * (unsafe {
@@ -347,10 +347,7 @@ fn calculate(
                             + matrix.uget([m2, i + 1, j])
                     });
 
-                if options.pert_func == PerturbationFunction::FuncFPiSin {
-                    star += fpisin_i * (pih * j as f64).sin();
-                }
-
+                star += unsafe { pert_func_matrix.uget((i, j)) };
                 if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
                     residuum = ((unsafe { *matrix.uget([m2, i, j]) }) - star).abs();
 
@@ -359,7 +356,6 @@ fn calculate(
                         _ => residuum,
                     };
                 }
-
                 unsafe {
                     *matrix.uget_mut([m1, i, j]) = star;
                 }
