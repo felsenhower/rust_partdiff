@@ -11,3 +11,4 @@ edition = "2018"
 default = []
 
 [dependencies]
+ndarray = "0.17.1"

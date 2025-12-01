@@ -1,7 +1,6 @@
+use ndarray::Array3;
 use std::env;
-use std::ops::{Index, IndexMut};
 use std::time::{Duration, Instant};
-use std::vec;
 
 // The supported calculation Algorithms
 // Gauss Seidel working on the same matrix
@@ -115,16 +114,15 @@ impl CalculationOptions {
 // Data structure for storing the the data needed during calculation
 #[derive(Debug)]
 struct CalculationArguments {
-    n: usize,                 // Number of spaces between lines (lines=n+1)
-    num_matrices: usize,      // number of matrices
-    h: f64,                   // length of a space between two lines
-    matrices: PartdiffTensor, // The matrices for calculation
+    n: usize,              // Number of spaces between lines (lines=n+1)
+    num_matrices: usize,   // number of matrices
+    h: f64,                // length of a space between two lines
+    matrices: Array3<f64>, // The matrices for calculation (ndarray)
 }
 
 impl CalculationArguments {
     fn new(n: usize, num_matrices: usize, h: f64) -> CalculationArguments {
-        let matrices: PartdiffTensor = PartdiffTensor::new(n + 1, num_matrices);
-
+        let matrices: Array3<f64> = Array3::<f64>::zeros((num_matrices, n + 1, n + 1));
         CalculationArguments {
             n,
             num_matrices,
@@ -149,41 +147,6 @@ impl CalculationResults {
             stat_iteration,
             stat_accuracy,
         }
-    }
-}
-
-// Simple data structure for a 3D matrix [m][i][j]
-// Has an efficient continuous 1D memory layout
-#[derive(Debug)]
-struct PartdiffTensor {
-    n: usize,
-    matrix: Vec<f64>,
-}
-
-impl PartdiffTensor {
-    fn new(n: usize, num_matrices: usize) -> PartdiffTensor {
-        let matrix = vec![0.0; num_matrices * n * n];
-        PartdiffTensor { n, matrix }
-    }
-}
-
-// Implementation of Index and IndexMut traits for the 3D matrix
-// 3d-array-indexing allows access to matrix elements with following syntax:
-//   matrix[[m,i,j]]
-// Only the unsafe, unchecked variant is kept for maximum performance.
-impl Index<[usize; 3]> for PartdiffTensor {
-    type Output = f64;
-
-    fn index(&self, idx: [usize; 3]) -> &Self::Output {
-        let offset = idx[0] * self.n * self.n + idx[1] * self.n + idx[2];
-        unsafe { self.matrix.get_unchecked(offset) }
-    }
-}
-
-impl IndexMut<[usize; 3]> for PartdiffTensor {
-    fn index_mut(&mut self, idx: [usize; 3]) -> &mut Self::Output {
-        let offset = idx[0] * self.n * self.n + idx[1] * self.n + idx[2];
-        unsafe { self.matrix.get_unchecked_mut(offset) }
     }
 }
 
@@ -317,10 +280,12 @@ fn init_matrices(arguments: &mut CalculationArguments, options: &CalculationOpti
 
         for g in 0..arguments.num_matrices as usize {
             for i in 0..(n + 1) {
-                matrix[[g, i, 0]] = 1.0 - (h * i as f64);
-                matrix[[g, i, n]] = h * i as f64;
-                matrix[[g, 0, i]] = 1.0 - (h * i as f64);
-                matrix[[g, n, i]] = h * i as f64;
+                unsafe {
+                    *matrix.uget_mut([g, i, 0]) = 1.0 - (h * i as f64);
+                    *matrix.uget_mut([g, i, n]) = h * i as f64;
+                    *matrix.uget_mut([g, 0, i]) = 1.0 - (h * i as f64);
+                    *matrix.uget_mut([g, n, i]) = h * i as f64;
+                }
             }
         }
     }
@@ -375,17 +340,19 @@ fn calculate(
 
             for j in 1..n {
                 star = 0.25
-                    * (matrix[[m2, i - 1, j]]
-                        + matrix[[m2, i, j - 1]]
-                        + matrix[[m2, i, j + 1]]
-                        + matrix[[m2, i + 1, j]]);
+                    * (unsafe {
+                        matrix.uget([m2, i - 1, j])
+                            + matrix.uget([m2, i, j - 1])
+                            + matrix.uget([m2, i, j + 1])
+                            + matrix.uget([m2, i + 1, j])
+                    });
 
                 if options.pert_func == PerturbationFunction::FuncFPiSin {
                     star += fpisin_i * (pih * j as f64).sin();
                 }
 
                 if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
-                    residuum = (matrix[[m2, i, j]] - star).abs();
+                    residuum = ((unsafe { *matrix.uget([m2, i, j]) }) - star).abs();
 
                     maxresiduum = match residuum {
                         r if r < maxresiduum => maxresiduum,
@@ -393,7 +360,9 @@ fn calculate(
                     };
                 }
 
-                matrix[[m1, i, j]] = star;
+                unsafe {
+                    *matrix.uget_mut([m1, i, j]) = star;
+                }
             }
         }
 
@@ -491,10 +460,9 @@ fn display_matrix(
     println!("Matrix:");
     for y in 0..9 as usize {
         for x in 0..9 as usize {
-            print!(
-                " {:.4}",
-                matrix[[results.m, y * (interlines + 1), x * (interlines + 1)]]
-            );
+            print!(" {:.4}", unsafe {
+                matrix.uget([results.m, y * (interlines + 1), x * (interlines + 1)])
+            });
         }
         print!("\n");
     }
