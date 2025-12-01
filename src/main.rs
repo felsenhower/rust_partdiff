@@ -1,4 +1,4 @@
-use ndarray::{s, Array2, Array3, ArrayView2, ArrayViewMut2, Zip};
+use ndarray::{azip, s, Array2, Array3, ArrayView2, ArrayViewMut2};
 use std::env;
 use std::time::{Duration, Instant};
 
@@ -438,18 +438,12 @@ fn calculate_jacobi(
         let right = old.slice(s![1..n, 2..n + 1]);
         let pert = pert_func_matrix.slice(s![1..n, 1..n]);
 
+        // The following three azip!() calls and the temporary matrix could all be avoided if it wasn't for this issue:
+        // https://github.com/rust-ndarray/ndarray/issues/1175
+        // Perhaps we can at least convert star to a lazy iterator...
         let mut star_matrix: Array2<f64> = Array2::<f64>::zeros((n - 1, n - 1));
-        Zip::from(&mut star_matrix)
-            .and(&up)
-            .and(&down)
-            .and(&left)
-            .and(&right)
-            .and(&pert)
-            .for_each(|star, &u, &d, &l, &r, &p| {
-                *star = 0.25 * (u + l + r + d) + p;
-            });
-
-        Zip::from(&star_matrix).and(&center).for_each(|&star, &c| {
+        azip!((star in &mut star_matrix, &u in &up, &d in &down, &l in &left, &r in &right, &p in &pert) {*star = 0.25 * (u + l + r + d) + p});
+        azip!((&star in &star_matrix, &c in &center) {
             if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
                 let residuum = (c - star).abs();
                 maxresiduum = match residuum {
@@ -458,11 +452,9 @@ fn calculate_jacobi(
                 };
             }
         });
-        Zip::from(&mut interior_new)
-            .and(&star_matrix)
-            .for_each(|new, &star| {
-                *new = star;
-            });
+        azip!((new in &mut interior_new, &star in &star_matrix) {
+            *new = star;
+        });
 
         results.stat_iteration += 1;
         results.stat_accuracy = maxresiduum;
