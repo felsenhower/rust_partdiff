@@ -1,4 +1,4 @@
-use ndarray::{azip, s, Array2, Array3, ArrayView2, ArrayViewMut2};
+use ndarray::{azip, par_azip, s, Array2, Array3, ArrayView2, ArrayViewMut2};
 use std::env;
 use std::time::{Duration, Instant};
 
@@ -442,7 +442,7 @@ fn calculate_jacobi(
         // https://github.com/rust-ndarray/ndarray/issues/1175
         // Perhaps we can at least convert star to a lazy iterator...
         let mut star_matrix: Array2<f64> = Array2::<f64>::zeros((n - 1, n - 1));
-        azip!((star in &mut star_matrix, &u in &up, &d in &down, &l in &left, &r in &right, &p in &pert) {*star = 0.25 * (u + l + r + d) + p});
+        par_azip!((star in &mut star_matrix, &u in &up, &d in &down, &l in &left, &r in &right, &p in &pert) {*star = 0.25 * (u + l + r + d) + p});
         azip!((&star in &star_matrix, &c in &center) {
             if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
                 let residuum = (c - star).abs();
@@ -452,7 +452,7 @@ fn calculate_jacobi(
                 };
             }
         });
-        azip!((new in &mut interior_new, &star in &star_matrix) {
+        par_azip!((new in &mut interior_new, &star in &star_matrix) {
             *new = star;
         });
 
