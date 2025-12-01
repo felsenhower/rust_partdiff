@@ -369,9 +369,7 @@ fn calculate(
         results.stat_iteration += 1;
         results.stat_accuracy = maxresiduum;
 
-        let tmp = m1;
-        m1 = m2;
-        m2 = tmp;
+        std::mem::swap(&mut m1, &mut m2);
 
         match options.termination {
             TerminationCondition::TermAcc => {
