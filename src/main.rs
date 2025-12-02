@@ -1,4 +1,4 @@
-use ndarray::{azip, par_azip, s, Array2, Array3, ArrayView2, ArrayViewMut2};
+use ndarray::{azip, par_azip, s, Array2, Array3, ArrayView2, ArrayViewMut2, Zip};
 use std::env;
 use std::time::{Duration, Instant};
 
@@ -438,23 +438,30 @@ fn calculate_jacobi(
         let right = old.slice(s![1..n, 2..n + 1]);
         let pert = pert_func_matrix.slice(s![1..n, 1..n]);
 
-        // The following three azip!() calls and the temporary matrix could all be avoided if it wasn't for this issue:
+        // ndarray::Zip only works with up to 6 producers. See this issue:
         // https://github.com/rust-ndarray/ndarray/issues/1175
-        // Perhaps we can at least convert star to a lazy iterator...
-        let mut star_matrix: Array2<f64> = Array2::<f64>::zeros((n - 1, n - 1));
-        par_azip!((star in &mut star_matrix, &u in &up, &d in &down, &l in &left, &r in &right, &p in &pert) {*star = 0.25 * (u + l + r + d) + p});
-        azip!((&star in &star_matrix, &c in &center) {
-            if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
-                let residuum = (c - star).abs();
-                maxresiduum = match residuum {
-                    r if r < maxresiduum => maxresiduum,
-                    _ => residuum,
-                };
-            }
-        });
-        par_azip!((new in &mut interior_new, &star in &star_matrix) {
-            *new = star;
-        });
+        // For the 5 stencil iterators, the perturbation iterator, and the output iterator, we would need 7 producers.
+        // Therefore, we need to package the stencil into its own producer like so:
+        let stencil = Zip::from(&up)
+            .and(&left)
+            .and(&center)
+            .and(&right)
+            .and(&down)
+            .map_collect(|&u, &l, &c, &r, &d| (u, l, c, r, d));
+        Zip::from(&mut interior_new)
+            .and(&stencil)
+            .and(&pert)
+            .for_each(|n, &s, &p| {
+                let (u, l, _c, r, d) = s;
+                let star = 0.25 * (u + l + r + d) + p;
+                *n = star;
+            });
+        maxresiduum = maxresiduum.max(
+            Zip::from(&interior_new)
+                .and(&center)
+                .map_collect(|&n, &c| (c - n).abs())
+                .fold(0.0 as f64, |max, r| max.max(*r)),
+        );
 
         results.stat_iteration += 1;
         results.stat_accuracy = maxresiduum;
