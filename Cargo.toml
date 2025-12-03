@@ -11,5 +11,5 @@ edition = "2018"
 default = []
 
 [dependencies]
-ndarray = { version = "0.17.1", features = ["rayon"] }
+ndarray = { git = "https://github.com/felsenhower/ndarray.git", branch = "extend_zip", version = "0.17.1", features = ["rayon"] }
 rayon = "1.11.0"

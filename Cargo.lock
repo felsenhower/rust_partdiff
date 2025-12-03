@@ -52,8 +52,7 @@ dependencies = [
 [[package]]
 name = "ndarray"
 version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c7c9125e8f6f10c9da3aad044cc918cf8784fa34de857b1aa68038eb05a50a9"
+source = "git+https://github.com/felsenhower/ndarray.git?branch=extend_zip#fb8f606e4878a9e3bbbae89a2f5e60923107de2c"
 dependencies = [
  "matrixmultiply",
  "num-complex",

@@ -1,4 +1,4 @@
-use ndarray::{azip, par_azip, s, Array2, Array3, ArrayView2, ArrayViewMut2, Zip};
+use ndarray::{s, Array2, Array3, ArrayView2, ArrayViewMut2, Zip};
 use std::env;
 use std::time::{Duration, Instant};
 
@@ -430,7 +430,7 @@ fn calculate_jacobi(
 
         maxresiduum = 0.0;
 
-        let mut interior_new = new.slice_mut(s![1..n, 1..n]);
+        let mut new = new.slice_mut(s![1..n, 1..n]);
         let center = old.slice(s![1..n, 1..n]);
         let up = old.slice(s![0..n - 1, 1..n]);
         let down = old.slice(s![2..n + 1, 1..n]);
@@ -438,29 +438,29 @@ fn calculate_jacobi(
         let right = old.slice(s![1..n, 2..n + 1]);
         let pert = pert_func_matrix.slice(s![1..n, 1..n]);
 
-        // ndarray::Zip only works with up to 6 producers. See this issue:
+        // In the upstream version, ndarray::Zip only works with up to 6 producers.
+        // See this issue:
         // https://github.com/rust-ndarray/ndarray/issues/1175
-        // For the 5 stencil iterators, the perturbation iterator, and the output iterator, we would need 7 producers.
-        // Therefore, we need to package the stencil into its own producer like so:
-        let stencil = Zip::from(&up)
-            .and(&left)
-            .and(&center)
-            .and(&right)
-            .and(&down)
-            .map_collect(|&u, &l, &c, &r, &d| (u, l, c, r, d));
-        Zip::from(&mut interior_new)
-            .and(&stencil)
-            .and(&pert)
-            .for_each(|n, &s, &p| {
-                let (u, l, _c, r, d) = s;
-                let star = 0.25 * (u + l + r + d) + p;
-                *n = star;
-            });
+        // For more than 6, you currently need this fork:
+        // https://github.com/felsenhower/ndarray
         maxresiduum = maxresiduum.max(
-            Zip::from(&interior_new)
+            Zip::from(&mut new)
+                .and(&up)
+                .and(&left)
                 .and(&center)
-                .map_collect(|&n, &c| (c - n).abs())
-                .fold(0.0 as f64, |max, r| max.max(*r)),
+                .and(&right)
+                .and(&down)
+                .and(&pert)
+                .par_fold(
+                    || 0.0 as f64,
+                    |m, n, &u, &l, &c, &r, &d, &p| {
+                        let star = 0.25 * (u + l + r + d) + p;
+                        let r = (c - star).abs();
+                        *n = star;
+                        m.max(r)
+                    },
+                    |max, r| max.max(r),
+                ),
         );
 
         results.stat_iteration += 1;
