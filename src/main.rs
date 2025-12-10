@@ -1,4 +1,5 @@
 use ndarray::{s, Array2, Array3, ArrayView2, ArrayViewMut2, Zip};
+use std::convert::TryInto;
 use std::env;
 use std::time::{Duration, Instant};
 
@@ -80,7 +81,7 @@ impl std::str::FromStr for TerminationCondition {
 // Data structure for storing the given parameters for the calculation
 #[derive(Debug)]
 struct CalculationOptions {
-    _number: u64,                      // number of threads
+    number: u64,                       // number of threads
     method: CalculationMethod,         // Gauss Seidel or Jacobi method of iteration
     interlines: usize,                 // matrix size = interline*8+9
     pert_func: PerturbationFunction,   // perturbation function
@@ -91,7 +92,7 @@ struct CalculationOptions {
 
 impl CalculationOptions {
     fn new(
-        _number: u64,
+        number: u64,
         method: CalculationMethod,
         interlines: usize,
         pert_func: PerturbationFunction,
@@ -100,7 +101,7 @@ impl CalculationOptions {
         term_accuracy: f64,
     ) -> CalculationOptions {
         CalculationOptions {
-            _number,
+            number,
             method,
             interlines,
             pert_func,
@@ -579,6 +580,10 @@ fn main() -> Result<(), String> {
     let options = ask_params(env::args())?;
     let (mut arguments, mut results) = init_variables(&options);
     init_matrices(&mut arguments, &options);
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(options.number.try_into().unwrap())
+        .build_global()
+        .unwrap();
     let now = Instant::now();
     calculate(&mut arguments, &mut results, &options);
     let duration = now.elapsed();
