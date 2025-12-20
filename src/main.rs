@@ -390,22 +390,25 @@ fn calculate_jacobi(
         m2 = 1;
     }
 
-    let mut pert_func_matrix: Array2<f64> = Array2::<f64>::zeros((n + 1, n + 1));
-    if options.pert_func == PerturbationFunction::FuncFPiSin {
-        const PI: f64 = 3.141592653589793;
-        const TWO_PI_SQUARE: f64 = 2.0 * PI * PI;
-        let pih: f64 = PI * h;
-        let fpisin: f64 = 0.25 * TWO_PI_SQUARE * h * h;
-        for i in 1..n {
-            let fpisin_i = fpisin * (pih * i as f64).sin();
-            for j in 1..n {
-                let perturbation = fpisin_i * (pih * j as f64).sin();
-                unsafe {
-                    *pert_func_matrix.uget_mut((i, j)) = perturbation;
+    let pert_func_matrix = {
+        let mut matrix: Array2<f64> = Array2::<f64>::zeros((n + 1, n + 1));
+        if options.pert_func == PerturbationFunction::FuncFPiSin {
+            const PI: f64 = 3.141592653589793;
+            const TWO_PI_SQUARE: f64 = 2.0 * PI * PI;
+            let pih: f64 = PI * h;
+            let fpisin: f64 = 0.25 * TWO_PI_SQUARE * h * h;
+            for i in 1..n {
+                let fpisin_i = fpisin * (pih * i as f64).sin();
+                for j in 1..n {
+                    let perturbation = fpisin_i * (pih * j as f64).sin();
+                    unsafe {
+                        *matrix.uget_mut((i, j)) = perturbation;
+                    }
                 }
             }
         }
-    }
+        matrix
+    };
 
     while term_iteration > 0 {
         let matrix = &mut arguments.matrices;
