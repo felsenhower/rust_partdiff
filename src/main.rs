@@ -291,8 +291,7 @@ fn init_matrices(arguments: &mut CalculationArguments, options: &CalculationOpti
     }
 }
 
-// Main calculation
-fn calculate(
+fn calculate_gauss_seidel(
     arguments: &mut CalculationArguments,
     results: &mut CalculationResults,
     options: &CalculationOptions,
@@ -382,6 +381,109 @@ fn calculate(
     }
 
     results.m = m2;
+}
+
+fn calculate_jacobi(
+    arguments: &mut CalculationArguments,
+    results: &mut CalculationResults,
+    options: &CalculationOptions,
+) {
+    const PI: f64 = 3.141592653589793;
+    const TWO_PI_SQUARE: f64 = 2.0 * PI * PI;
+
+    let n = arguments.n;
+    let h = arguments.h;
+
+    let mut star: f64;
+    let mut residuum: f64;
+    let mut maxresiduum: f64;
+
+    let mut pih: f64 = 0.0;
+    let mut fpisin: f64 = 0.0;
+
+    let mut term_iteration = options.term_iteration;
+
+    // for distinguishing between old and new state of the matrix if two matrices are used
+    let mut m1: usize = 0;
+    let mut m2: usize = 0;
+
+    if options.method == CalculationMethod::MethJacobi {
+        m1 = 0;
+        m2 = 1;
+    }
+
+    if options.pert_func == PerturbationFunction::FuncFPiSin {
+        pih = PI * h;
+        fpisin = 0.25 * TWO_PI_SQUARE * h * h;
+    }
+
+    while term_iteration > 0 {
+        let matrix = &mut arguments.matrices;
+
+        maxresiduum = 0.0;
+
+        for i in 1..n {
+            let mut fpisin_i = 0.0;
+
+            if options.pert_func == PerturbationFunction::FuncFPiSin {
+                fpisin_i = fpisin * (pih * i as f64).sin();
+            }
+
+            for j in 1..n {
+                star = 0.25
+                    * (unsafe {
+                        matrix.uget([m2, i - 1, j])
+                            + matrix.uget([m2, i, j - 1])
+                            + matrix.uget([m2, i, j + 1])
+                            + matrix.uget([m2, i + 1, j])
+                    });
+
+                if options.pert_func == PerturbationFunction::FuncFPiSin {
+                    star += fpisin_i * (pih * j as f64).sin();
+                }
+
+                if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
+                    residuum = ((unsafe { *matrix.uget([m2, i, j]) }) - star).abs();
+
+                    maxresiduum = match residuum {
+                        r if r < maxresiduum => maxresiduum,
+                        _ => residuum,
+                    };
+                }
+
+                unsafe {
+                    *matrix.uget_mut([m1, i, j]) = star;
+                }
+            }
+        }
+
+        results.stat_iteration += 1;
+        results.stat_accuracy = maxresiduum;
+
+        std::mem::swap(&mut m1, &mut m2);
+
+        match options.termination {
+            TerminationCondition::TermAcc => {
+                if maxresiduum < options.term_accuracy {
+                    term_iteration = 0;
+                }
+            }
+            TerminationCondition::TermIter => term_iteration -= 1,
+        }
+    }
+
+    results.m = m2;
+}
+
+fn calculate(
+    arguments: &mut CalculationArguments,
+    results: &mut CalculationResults,
+    options: &CalculationOptions,
+) {
+    match options.method {
+        CalculationMethod::MethJacobi => calculate_jacobi(arguments, results, options),
+        CalculationMethod::MethGaussSeidel => calculate_gauss_seidel(arguments, results, options),
+    }
 }
 
 fn format_residuum(x: f64) -> Result<String, String> {
