@@ -303,35 +303,24 @@ fn calculate(
     let n = arguments.n;
     let h = arguments.h;
 
-    let mut star: f64;
-    let mut residuum: f64;
-    let mut maxresiduum: f64;
-
-    let mut pih: f64 = 0.0;
-    let mut fpisin: f64 = 0.0;
+    let (pih, fpisin): (f64, f64) = match options.pert_func {
+        PerturbationFunction::FuncFPiSin => (PI * h, 0.25 * TWO_PI_SQUARE * h * h),
+        _ => (0.0, 0.0),
+    };
 
     let mut term_iteration = options.term_iteration;
 
-    // for distinguishing between old and new state of the matrix if two matrices are used
-    let mut m1: usize = 0;
-    let mut m2: usize = 0;
-
-    if options.method == CalculationMethod::MethJacobi {
-        m1 = 0;
-        m2 = 1;
-    }
-
-    if options.pert_func == PerturbationFunction::FuncFPiSin {
-        pih = PI * h;
-        fpisin = 0.25 * TWO_PI_SQUARE * h * h;
-    }
+    let (mut m1, mut m2): (usize, usize) = match options.method {
+        CalculationMethod::MethJacobi => (0, 1),
+        _ => (0, 0),
+    };
 
     while term_iteration > 0 {
         let matrix = &mut arguments.matrices;
 
-        maxresiduum = 0.0;
+        let mut maxresiduum: f64 = 0.0;
 
-        for i in 1..n {
+        (1..n).for_each(|i| {
             let mut fpisin_i = 0.0;
 
             if options.pert_func == PerturbationFunction::FuncFPiSin {
@@ -339,7 +328,7 @@ fn calculate(
             }
 
             for j in 1..n {
-                star = 0.25
+                let mut star: f64 = 0.25
                     * (unsafe {
                         matrix.uget([m2, i - 1, j])
                             + matrix.uget([m2, i, j - 1])
@@ -352,7 +341,7 @@ fn calculate(
                 }
 
                 if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
-                    residuum = ((unsafe { *matrix.uget([m2, i, j]) }) - star).abs();
+                    let residuum: f64 = ((unsafe { *matrix.uget([m2, i, j]) }) - star).abs();
 
                     maxresiduum = match residuum {
                         r if r < maxresiduum => maxresiduum,
@@ -364,7 +353,7 @@ fn calculate(
                     *matrix.uget_mut([m1, i, j]) = star;
                 }
             }
-        }
+        });
 
         results.stat_iteration += 1;
         results.stat_accuracy = maxresiduum;
