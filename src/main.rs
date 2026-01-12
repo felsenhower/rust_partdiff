@@ -318,9 +318,7 @@ fn calculate(
     while term_iteration > 0 {
         let matrix = &mut arguments.matrices;
 
-        let mut maxresiduum: f64 = 0.0;
-
-        (1..n).for_each(|i| {
+        let maxresiduum: f64 = (1..n).fold(0.0, |mut m, i| {
             let mut fpisin_i = 0.0;
 
             if options.pert_func == PerturbationFunction::FuncFPiSin {
@@ -343,8 +341,8 @@ fn calculate(
                 if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
                     let residuum: f64 = ((unsafe { *matrix.uget([m2, i, j]) }) - star).abs();
 
-                    maxresiduum = match residuum {
-                        r if r < maxresiduum => maxresiduum,
+                    m = match residuum {
+                        r if r < m => m,
                         _ => residuum,
                     };
                 }
@@ -353,6 +351,8 @@ fn calculate(
                     *matrix.uget_mut([m1, i, j]) = star;
                 }
             }
+
+            m
         });
 
         results.stat_iteration += 1;
