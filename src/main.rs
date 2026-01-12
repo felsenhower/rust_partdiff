@@ -1,4 +1,4 @@
-use ndarray::Array3;
+use ndarray::{Array3, ArrayView2, ArrayViewMut2};
 use std::env;
 use std::time::{Duration, Instant};
 
@@ -420,6 +420,25 @@ fn calculate_jacobi(
     while term_iteration > 0 {
         let matrix = &mut arguments.matrices;
 
+        let (mut matrix_out, matrix_in) = unsafe {
+            let ptr = matrix.as_mut_ptr();
+            match (m1, m2) {
+                (0, 1) => {
+                    let new = ArrayViewMut2::from_shape_ptr((n + 1, n + 1), ptr);
+                    let old =
+                        ArrayView2::from_shape_ptr((n + 1, n + 1), ptr.add((n + 1) * (n + 1)));
+                    (new, old)
+                }
+                (1, 0) => {
+                    let old = ArrayView2::from_shape_ptr((n + 1, n + 1), ptr);
+                    let new =
+                        ArrayViewMut2::from_shape_ptr((n + 1, n + 1), ptr.add((n + 1) * (n + 1)));
+                    (new, old)
+                }
+                _ => unreachable!(),
+            }
+        };
+
         maxresiduum = 0.0;
 
         for i in 1..n {
@@ -432,10 +451,10 @@ fn calculate_jacobi(
             for j in 1..n {
                 star = 0.25
                     * (unsafe {
-                        matrix.uget([m2, i - 1, j])
-                            + matrix.uget([m2, i, j - 1])
-                            + matrix.uget([m2, i, j + 1])
-                            + matrix.uget([m2, i + 1, j])
+                        matrix_in.uget([i - 1, j])
+                            + matrix_in.uget([i, j - 1])
+                            + matrix_in.uget([i, j + 1])
+                            + matrix_in.uget([i + 1, j])
                     });
 
                 if options.pert_func == PerturbationFunction::FuncFPiSin {
@@ -443,7 +462,7 @@ fn calculate_jacobi(
                 }
 
                 if (options.termination == TerminationCondition::TermAcc) || (term_iteration == 1) {
-                    residuum = ((unsafe { *matrix.uget([m2, i, j]) }) - star).abs();
+                    residuum = ((unsafe { *matrix_in.uget([i, j]) }) - star).abs();
 
                     maxresiduum = match residuum {
                         r if r < maxresiduum => maxresiduum,
@@ -452,7 +471,7 @@ fn calculate_jacobi(
                 }
 
                 unsafe {
-                    *matrix.uget_mut([m1, i, j]) = star;
+                    *matrix_out.uget_mut([i, j]) = star;
                 }
             }
         }
