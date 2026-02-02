@@ -170,20 +170,19 @@ impl PartdiffTensor {
 // Implementation of Index and IndexMut traits for the 3D matrix
 // 3d-array-indexing allows access to matrix elements with following syntax:
 //   matrix[[m,i,j]]
-// Only the unsafe, unchecked variant is kept for maximum performance.
 impl Index<[usize; 3]> for PartdiffTensor {
     type Output = f64;
 
     fn index(&self, idx: [usize; 3]) -> &Self::Output {
         let offset = idx[0] * self.n * self.n + idx[1] * self.n + idx[2];
-        unsafe { self.matrix.get_unchecked(offset) }
+        &self.matrix[offset]
     }
 }
 
 impl IndexMut<[usize; 3]> for PartdiffTensor {
     fn index_mut(&mut self, idx: [usize; 3]) -> &mut Self::Output {
         let offset = idx[0] * self.n * self.n + idx[1] * self.n + idx[2];
-        unsafe { self.matrix.get_unchecked_mut(offset) }
+        &mut self.matrix[offset]
     }
 }
 
